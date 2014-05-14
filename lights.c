@@ -42,7 +42,7 @@ static int g_backlight = 255;
 static int g_buttons = 0;
 static int g_attention = 0;
 
-#define MAX_BRIGHTNESS 250
+#define MAX_BRIGHTNESS 255
 
 #define LP5523_LEDS			8 //9
 
@@ -55,14 +55,14 @@ static int g_attention = 0;
 #define EF59_LED1_RED       6
 #define EF59_LED2_RED       7
 
-char const*const MENU_LED_FILE = "/sys/class/leds/lp5523:channel4/led_current";
-char const*const BACK_LED_FILE = "/sys/class/leds/lp5523:channel5/led_current";
-char const*const RED_R_LED_FILE = "/sys/class/leds/lp5523:channel6/led_current";
-char const*const GREEN_R_LED_FILE = "/sys/class/leds/lp5523:channel0/led_current";
-char const*const BLUE_R_LED_FILE = "/sys/class/leds/lp5523:channel1/led_current";
-char const*const RED_L_LED_FILE = "/sys/class/leds/lp5523:channel7/led_current";
-char const*const GREEN_L_LED_FILE = "/sys/class/leds/lp5523:channel2/led_current";
-char const*const BLUE_L_LED_FILE = "/sys/class/leds/lp5523:channel3/led_current";
+char const*const MENU_LED_FILE = "/sys/class/leds/lp5523:channel4/brightness";
+char const*const BACK_LED_FILE = "/sys/class/leds/lp5523:channel5/brightness";
+char const*const RED_R_LED_FILE = "/sys/class/leds/lp5523:channel6/brightness";
+char const*const GREEN_R_LED_FILE = "/sys/class/leds/lp5523:channel0/brightness";
+char const*const BLUE_R_LED_FILE = "/sys/class/leds/lp5523:channel1/brightness";
+char const*const RED_L_LED_FILE = "/sys/class/leds/lp5523:channel7/brightness";
+char const*const GREEN_L_LED_FILE = "/sys/class/leds/lp5523:channel2/brightness";
+char const*const BLUE_L_LED_FILE = "/sys/class/leds/lp5523:channel3/brightness";
 char const*const LCD_FILE = "/sys/class/leds/lcd-backlight/brightness";
 
 char const*const LED_WRITEON_FILE = "/dev/led_fops";
