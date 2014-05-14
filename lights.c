@@ -215,7 +215,7 @@ static int set_speaker_light_locked(struct light_device_t* dev, struct light_sta
 		write_int(GREEN_R_LED_FILE, green);
 		write_int(GREEN_L_LED_FILE, green);
 		write_int(BLUE_R_LED_FILE, blue);
-		write_int(GREEN_L_LED_FILE, blue);
+		write_int(BLUE_L_LED_FILE, blue);
 		for(i=0; i < LP5523_LEDS; i++)
 		{
 			if(i==EF59_MENU_KEY || i==EF59_BACK_KEY) continue;
