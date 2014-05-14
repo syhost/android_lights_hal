@@ -40,32 +40,13 @@ static struct light_state_t g_notification;
 static struct light_state_t g_battery;
 static int g_backlight = 255;
 static int g_buttons = 0;
+static int g_red = 0;
 static int g_attention = 0;
 
-#define MAX_BRIGHTNESS 250
-
-#define LP5523_LEDS			8 //9
-
-#define EF59_LED1_GREEN     0
-#define EF59_LED1_BLUE      1
-#define EF59_LED2_GREEN     2
-#define EF59_LED2_BLUE      3
-#define EF59_MENU_KEY       4
-#define EF59_BACK_KEY       5
-#define EF59_LED1_RED       6
-#define EF59_LED2_RED       7
-
-char const*const MENU_LED_FILE = "/sys/class/leds/lp5523:channel4/led_current";
-char const*const BACK_LED_FILE = "/sys/class/leds/lp5523:channel5/led_current";
-char const*const RED_R_LED_FILE = "/sys/class/leds/lp5523:channel6/led_current";
-char const*const GREEN_R_LED_FILE = "/sys/class/leds/lp5523:channel0/led_current";
-char const*const BLUE_R_LED_FILE = "/sys/class/leds/lp5523:channel1/led_current";
-char const*const RED_L_LED_FILE = "/sys/class/leds/lp5523:channel7/led_current";
-char const*const GREEN_L_LED_FILE = "/sys/class/leds/lp5523:channel2/led_current";
-char const*const BLUE_L_LED_FILE = "/sys/class/leds/lp5523:channel3/led_current";
+char const*const RED_LED_FILE = "/sys/class/leds/red/brightness";
+char const*const RED_LED_MAX_FILE = "/sys/class/leds/red/max_brightness";
 char const*const LCD_FILE = "/sys/class/leds/lcd-backlight/brightness";
-
-char const*const LED_WRITEON_FILE = "/dev/led_fops";
+char const*const BUTTON_FILE = "/sys/class/leds/button-backlight/brightness";
 
 static int set_light_keyboard(struct light_device_t* dev, struct light_state_t const* state);
 static int set_light_buttons(struct light_device_t* dev, struct light_state_t const* state);
@@ -101,16 +82,33 @@ static int write_int(char const* path, int value)
     }
 }
 
-static int write_str(char const* path, char *value)
+static int read_int(char const *path)
 {
     int fd;
-    static int already_warned = 0;
+    char buffer[2];
 
-    fd = open(path, O_RDWR);
+    fd = open(path, O_RDONLY);
+
     if (fd >= 0) {
-        char buffer[PAGE_SIZE];
-        int bytes = sprintf(buffer, "%s\n", value);
-        int amt = write(fd, buffer, bytes);
+        read(fd, buffer, 1);
+    }
+    close(fd);
+
+    return atoi(buffer);
+}
+
+static int write_str(char const *path, const char* value)
+{
+    int fd;
+    static int already_warned;
+
+    already_warned = 0;
+
+    ALOGV("write_str: path %s, value %s", path, value);
+    fd = open(path, O_RDWR);
+
+    if (fd >= 0) {
+        int amt = write(fd, value, strlen(value));
         close(fd);
         return amt == -1 ? -errno : 0;
     } else {
@@ -130,18 +128,15 @@ static int is_lit(struct light_state_t const* state)
 static int rgb_to_brightness(struct light_state_t const* state)
 {
     int color = state->color & 0x00ffffff;
-    int brightness = ((77*((color>>16) & 0x00ff)) + (150*((color>>8) & 0x00ff)) + (29*(color & 0x00ff))) >> 8
 
-	if (brightness > MAX_BRIGHTNESS)
-		brightness = MAX_BRIGHTNESS;
-    return brightness;
+    return ((77*((color>>16) & 0x00ff)) + (150*((color>>8) & 0x00ff)) + (29*(color & 0x00ff))) >> 8;
 }
 
 static int set_light_backlight(struct light_device_t* dev, struct light_state_t const* state)
 {
     int err = 0;
     int brightness = rgb_to_brightness(state);
-    
+  
     pthread_mutex_lock(&g_lock);
     g_backlight = brightness;
     err = write_int(LCD_FILE, brightness);
@@ -149,89 +144,26 @@ static int set_light_backlight(struct light_device_t* dev, struct light_state_t 
     return err;
 }
 
-static int set_light_keyboard(struct light_device_t* dev, struct light_state_t const* state)
-{
-    int err = 0;
-    int on = is_lit(state);
-    int brightness = rgb_to_brightness(state);
-    pthread_mutex_lock(&g_lock);
-    if(on)
-	{
-		write_int(MENU_LED_FILE, brightness);
-		write_str(LED_WRITEON_FILE, "writeon5");
-		write_int(BACK_LED_FILE, brightness);
-		write_str(LED_WRITEON_FILE, "writeon6");
-    }
-    else
-    {
-    	write_str(LED_WRITEON_FILE, "writeoff5");
-    	write_str(LED_WRITEON_FILE, "writeoff6");
-    }
-    pthread_mutex_unlock(&g_lock);
-    return err;
-}
 
 static int set_light_buttons(struct light_device_t* dev, struct light_state_t const* state)
 {
     int err = 0;
     int on = is_lit(state);
-    int brightness = rgb_to_brightness(state);
     pthread_mutex_lock(&g_lock);
-    if(on)
-	{
-		write_int(MENU_LED_FILE, brightness);
-		write_str(LED_WRITEON_FILE, "writeon5");
-		write_int(BACK_LED_FILE, brightness);
-		write_str(LED_WRITEON_FILE, "writeon6");
-    }
-    else
-    {
-    	write_str(LED_WRITEON_FILE, "writeoff5");
-    	write_str(LED_WRITEON_FILE, "writeoff6");
-    }
+    g_buttons = on;
+    err = write_int(BUTTON_FILE, on?255:0);
+    //err = write_int(RED_LED_MAX_FILE, on?20:100);
+    err = write_int(RED_LED_FILE, on?7:0);
     pthread_mutex_unlock(&g_lock);
     return err;
 }
 
 static int set_speaker_light_locked(struct light_device_t* dev, struct light_state_t const* state)
 {
-    int alpha, red, green, blue;
-    unsigned int colorRGB;
-    int i;
-    char buffer[PAGE_SIZE];
-    int on = is_lit(state);
-
-	if(on)
-	{
-		colorRGB = state->color;
-
-		red = (colorRGB >> 16) & 0xFF;
-		green = (colorRGB >> 8) & 0xFF;
-		blue = colorRGB & 0xFF;
-		ALOGD("set_speaker_light_locked R=%d,G=%d,B=%d\n", red, green, blue);
-
-		write_int(RED_R_LED_FILE, red);
-		write_int(RED_L_LED_FILE, red);
-		write_int(GREEN_R_LED_FILE, green);
-		write_int(GREEN_L_LED_FILE, green);
-		write_int(BLUE_R_LED_FILE, blue);
-		write_int(GREEN_L_LED_FILE, blue);
-		for(i=0; i < LP5523_LEDS; i++)
-		{
-			if(i==EF59_MENU_KEY || i==EF59_BACK_KEY) continue;
-			sprintf(buffer, "writeon%d\n", i+1);
-			write_str(LED_WRITEON_FILE, buffer);
-		}
-	}
-	else
-	{
-		for(i=0; i<LP5523_LEDS; i++)
-		{
-			if(i==EF59_MENU_KEY || i==EF59_BACK_KEY) continue;
-			sprintf(buffer, "writeoff%d\n", i+1);
-			write_str(LED_WRITEON_FILE, buffer);
-		}
-	}
+    int len;
+    int red; 
+    red = state->color;
+    write_int(RED_LED_FILE, red);
     return 0;
 }
 
@@ -246,8 +178,11 @@ static void handle_speaker_battery_locked(struct light_device_t* dev)
 
 static int set_light_battery(struct light_device_t* dev, struct light_state_t const* state)
 {
+    int on = is_lit(state);
     pthread_mutex_lock(&g_lock);
-    g_battery = *state;
+    g_battery = *state;   
+    g_battery.color = on?3:g_buttons?7:0;
+    g_red = g_battery.color;
     ALOGD("set_light_battery color=0x%08x", state->color);
     handle_speaker_battery_locked(dev);
     pthread_mutex_unlock(&g_lock);
@@ -256,8 +191,11 @@ static int set_light_battery(struct light_device_t* dev, struct light_state_t co
 
 static int set_light_notifications(struct light_device_t* dev, struct light_state_t const* state)
 {
+    int on = is_lit(state);
     pthread_mutex_lock(&g_lock);
-    g_notification = *state;
+    g_notification = *state; 
+    g_notification.color = on?4:g_buttons?7:0;
+    g_red = g_notification.color;
     ALOGD("set_light_notifications color=0x%08x", state->color);
     handle_speaker_battery_locked(dev);
     pthread_mutex_unlock(&g_lock);
@@ -266,6 +204,7 @@ static int set_light_notifications(struct light_device_t* dev, struct light_stat
 
 static int set_light_attention(struct light_device_t* dev, struct light_state_t const* state)
 {
+    int brightness = rgb_to_brightness(state);
     pthread_mutex_lock(&g_lock);
     ALOGD("set_light_attention color=0x%08x", state->color);
     if (state->flashMode == LIGHT_FLASH_HARDWARE) {
@@ -273,6 +212,7 @@ static int set_light_attention(struct light_device_t* dev, struct light_state_t 
     } else if (state->flashMode == LIGHT_FLASH_NONE) {
         g_attention = 0;
     }
+    write_int(RED_LED_FILE, brightness?4:g_buttons?7:0);
     pthread_mutex_unlock(&g_lock);
     return 0;
 }
@@ -304,7 +244,7 @@ static int open_lights(const struct hw_module_t* module, char const* name, struc
         set_light = set_light_backlight;
     }
     else if (0 == strcmp(LIGHT_ID_KEYBOARD, name)) {
-        set_light = set_light_keyboard;
+        set_light = set_light_buttons;
     }
     else if (0 == strcmp(LIGHT_ID_BUTTONS, name)) {
         set_light = set_light_buttons;
@@ -350,7 +290,7 @@ struct hw_module_t HAL_MODULE_INFO_SYM = {
     .version_major = 1,
     .version_minor = 0,
     .id = LIGHTS_HARDWARE_MODULE_ID,
-    .name = "Pantech lights Module",
+    .name = "nubia lights Module",
     .author = "soyudesign@gmail.com",
     .methods = &lights_module_methods,
 };
