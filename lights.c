@@ -246,20 +246,43 @@ static void handle_speaker_battery_locked(struct light_device_t* dev)
 
 static int set_light_battery(struct light_device_t* dev, struct light_state_t const* state)
 {
+	int alpha, red, green, blue;
+	unsigned int colorRGB;
 	int on = is_lit(state);
 	
     pthread_mutex_lock(&g_lock);
     g_battery = *state;
     ALOGD("set_light_battery color=0x%08x", state->color);
+	colorRGB = state->color;
+
+	red = (colorRGB >> 16) & 0xFF;
+	green = (colorRGB >> 8) & 0xFF;
+	blue = colorRGB & 0xFF;
+	ALOGD("set_speaker_light_locked R=%d,G=%d,B=%d\n", red, green, blue);
     //handle_speaker_battery_locked(dev);
     if(on)
 	{
-		write_str(LED_WRITEON_FILE, "red_dim");
+		if((green > 0) && (red == 0) && (blue == 0))
+		{
+			write_str(LED_WRITEON_FILE, "writeoff7");
+			write_str(LED_WRITEON_FILE, "writeoff8");
+			
+			write_int(GREEN_R_LED_FILE, green);
+			write_int(GREEN_L_LED_FILE, green);
+			write_str(LED_WRITEON_FILE, "writeon1");
+			write_str(LED_WRITEON_FILE, "writeon3");
+		}
+		else
+		{
+			write_str(LED_WRITEON_FILE, "red_dim");
+		}
 	}
 	else
 	{
 		write_str(LED_WRITEON_FILE, "writeoff7");
 		write_str(LED_WRITEON_FILE, "writeoff8");
+		write_str(LED_WRITEON_FILE, "writeoff1");
+		write_str(LED_WRITEON_FILE, "writeoff3");
 	}
     pthread_mutex_unlock(&g_lock);
     return 0;
