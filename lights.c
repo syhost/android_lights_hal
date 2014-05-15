@@ -246,10 +246,21 @@ static void handle_speaker_battery_locked(struct light_device_t* dev)
 
 static int set_light_battery(struct light_device_t* dev, struct light_state_t const* state)
 {
+	int on = is_lit(state);
+	
     pthread_mutex_lock(&g_lock);
     g_battery = *state;
     ALOGD("set_light_battery color=0x%08x", state->color);
-    handle_speaker_battery_locked(dev);
+    //handle_speaker_battery_locked(dev);
+    if(on)
+	{
+		write_str(LED_WRITEON_FILE, "red_dim");
+	}
+	else
+	{
+		write_str(LED_WRITEON_FILE, "writeoff7");
+		write_str(LED_WRITEON_FILE, "writeoff8");
+	}
     pthread_mutex_unlock(&g_lock);
     return 0;
 }
