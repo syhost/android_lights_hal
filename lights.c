@@ -67,6 +67,8 @@ char const*const LCD_FILE = "/sys/class/leds/lcd-backlight/brightness";
 
 char const*const LED_WRITEON_FILE = "/dev/led_fops";
 
+char const*const BAT_CAP_FILE = "/sys/class/power_supply/battery/capacity";
+
 static int set_light_keyboard(struct light_device_t* dev, struct light_state_t const* state);
 static int set_light_buttons(struct light_device_t* dev, struct light_state_t const* state);
 
@@ -120,6 +122,21 @@ static int write_str(char const* path, char *value)
         }
         return -errno;
     }
+}
+
+static int read_int(char const *path)
+{
+    int fd;
+    char buffer[2];
+
+    fd = open(path, O_RDONLY);
+
+    if (fd >= 0) {
+        read(fd, buffer, 1);
+    }
+    close(fd);
+
+    return atoi(buffer);
 }
 
 static int is_lit(struct light_state_t const* state)
@@ -249,6 +266,7 @@ static int set_light_battery(struct light_device_t* dev, struct light_state_t co
 	int alpha, red, green, blue;
 	unsigned int colorRGB;
 	int on = is_lit(state);
+	int bat_cap = read_int(BAT_CAP_FILE);
 	
     pthread_mutex_lock(&g_lock);
     g_battery = *state;
@@ -262,10 +280,9 @@ static int set_light_battery(struct light_device_t* dev, struct light_state_t co
     //handle_speaker_battery_locked(dev);
     if(on)
 	{
-		if((green > 0) && (red == 0) && (blue == 0))
+		if(bat_cap > 95)
 		{
-			write_str(LED_WRITEON_FILE, "writeoff7");
-			write_str(LED_WRITEON_FILE, "writeoff8");
+			write_str(LED_WRITEON_FILE, "reset");
 			
 			write_int(GREEN_R_LED_FILE, green);
 			write_int(GREEN_L_LED_FILE, green);
@@ -274,15 +291,14 @@ static int set_light_battery(struct light_device_t* dev, struct light_state_t co
 		}
 		else
 		{
+			write_str(LED_WRITEON_FILE, "writeoff1");
+			write_str(LED_WRITEON_FILE, "writeoff3");
 			write_str(LED_WRITEON_FILE, "red_dim");
 		}
 	}
 	else
 	{
-		write_str(LED_WRITEON_FILE, "writeoff7");
-		write_str(LED_WRITEON_FILE, "writeoff8");
-		write_str(LED_WRITEON_FILE, "writeoff1");
-		write_str(LED_WRITEON_FILE, "writeoff3");
+		write_str(LED_WRITEON_FILE, "reset");
 	}
     pthread_mutex_unlock(&g_lock);
     return 0;
